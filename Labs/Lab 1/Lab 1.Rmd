@@ -1,0 +1,137 @@
+---
+title: "STA2201 Lab 1"
+author: "Timothy Jordan Regis: 1005296323"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include = FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(kableExtra)
+```
+
+# Data
+
+```{r, include=FALSE}
+dm <- read_table("https://www.prdh.umontreal.ca/BDLC/data/ont/Mx_1x1.txt", skip = 2, col_types = "dcddd")
+head(dm)
+dm <- data.frame(dm)
+
+pop <- read_table("https://www.prdh.umontreal.ca/BDLC/data/ont/Population.txt", skip = 2, col_types = "dcddd")
+head(pop)
+pop <- data.frame(pop)
+```
+Mortality Rate Data:
+
+```{r}
+head(dm)
+```
+
+Population Data:
+
+```{r}
+head(pop)
+```
+
+
+# Q1
+```{r}
+mort_rates = dm %>% 
+  filter(
+  Age == 10 | Age == 20 | Age == 30 | Age == 40 
+) %>% 
+  mutate(
+  ratio = Male/Female
+)
+mort_rates %>% 
+  ggplot(aes(y = ratio, x = Year, color = Age)) +
+  geom_line(size = 1) + 
+  labs(title = "Male/Female Mortality Rates") +
+  ylab("Ratio") + 
+  theme_minimal()
+#plot(mort_rates$ratio, mort_rates$Year, type = "line", color = Age)
+```
+
+# Q2
+
+```{r}
+max_females = dm %>% group_by(Year) %>% filter(Female == max(Female, na.rm = TRUE)) %>% select(Year, Age, Female) %>% rename("Rate" = Female)
+head(max_females)
+```
+
+```{r}
+# length(unique(dm$Year))
+# length(unique(max_females$Year))
+```
+
+```{r}
+kable(max_females, digits = 3, booktabs = FALSE, longtable = TRUE) %>%
+  kable_styling(latex_options = c("hold_position", "repeat_header"))
+```
+
+
+
+# Q3
+
+
+
+```{r, message=FALSE, warning=FALSE}
+stds = dm %>% 
+  group_by(Age) %>% 
+  summarise(std_Male = sd(Male, na.rm = TRUE), 
+            std_Female = sd(Female, na.rm = TRUE), 
+            std_Total = sd(Total, na.rm = TRUE))
+stds[order(as.numeric(stds$Age)),]
+```
+
+
+```{r}
+#length(unique(dm$Age))
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+kable(stds[order(as.numeric(stds$Age)),], digits = 5, booktabs = TRUE, longtable = TRUE) %>%
+  kable_styling(latex_options = c("hold_position", "repeat_header"))
+```
+
+
+
+# Q4
+
+```{r}
+m_vs_f = dm %>% left_join(y = pop, by = c("Year", "Age")) %>% mutate(
+  pw_F = Female.x/Female.y,
+  pw_M = Male.x/Male.y
+) %>% filter(!is.nan(pw_M) & !is.nan(pw_F) & 
+             !is.infinite(pw_M) & !is.infinite(pw_F)) %>% 
+  group_by(Year) %>% 
+  summarise(avg_F = mean(pw_F, na.rm = TRUE), avg_M = mean(pw_M, na.rm = TRUE)) %>% 
+  pivot_longer(cols = c(2:3), names_to = "Sex", values_to = "Average_Rate") 
+
+m_vs_f %>% 
+  ggplot(aes(x = Year, y = Average_Rate, color = Sex)) + 
+    geom_line(size = 1) + 
+    labs(title = "Male vs. Female Death Rates") +
+    ylab("Average Population Weighted Death Rate") +
+    scale_color_manual(labels = c("Female", "Male"), values = c("darkorchid", "forestgreen")) + 
+  theme_minimal()
+  # + 
+  #   scale_fill_discrete(labels=c('Female', 'Male'))
+```
+
+From the looks of this graph, men tend to see a much higher variability in their death rates, often attaining greater average levels than Women.
+This is especially notable in the years after the 1960s, where men's rates fluctuate over a very short period while women's remain fairly constant. 
+between the women's rates and rates much greater.
+
+
+
+
+
+

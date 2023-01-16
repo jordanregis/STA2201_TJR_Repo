@@ -62,7 +62,7 @@ mort_rates %>%
 
 ```{r}
 max_females = dm %>% group_by(Year) %>% filter(Female == max(Female, na.rm = TRUE)) %>% select(Year, Age, Female) %>% rename("Rate" = Female)
-head(max_females)
+#head(max_females)
 ```
 
 ```{r}
@@ -87,7 +87,7 @@ stds = dm %>%
   summarise(std_Male = sd(Male, na.rm = TRUE), 
             std_Female = sd(Female, na.rm = TRUE), 
             std_Total = sd(Total, na.rm = TRUE))
-stds[order(as.numeric(stds$Age)),]
+#stds[order(as.numeric(stds$Age)),]
 ```
 
 
@@ -127,8 +127,7 @@ m_vs_f %>%
 ```
 
 From the looks of this graph, men tend to see a much higher variability in their death rates, often attaining greater average levels than Women.
-This is especially notable in the years after the 1960s, where men's rates fluctuate over a very short period while women's remain fairly constant. 
-between the women's rates and rates much greater.
+This is especially notable in the years after the 1960s, where men's rates fluctuate over a very short period while the women's rates remain fairly constant.
 
 
 

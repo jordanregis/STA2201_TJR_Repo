@@ -1,0 +1,240 @@
+---
+title: "STA2201 Lab #2"
+author: "Timothy Jordan Regis"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include = FALSE}
+#install.packages("janitor")
+library(opendatatoronto)
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(skimr) # EDA
+library(visdat) # EDA
+library(janitor)
+library(lubridate)
+library(ggrepel)
+library(ggplot2)
+library(car)
+library(kableExtra)
+```
+
+
+# Q1
+
+```{r, include = FALSE}
+all_data <- list_packages(limit = 500)
+```
+
+
+```{r, include = FALSE}
+res = list_package_resources("996cfe8d-fb35-40ce-b569-698d51fc683b")
+```
+
+```{r, include = FALSE}
+res <- res %>% mutate(year = str_extract(name, "202.?"))
+delay_2022_ids <- res %>% filter(year==2022) %>% select(id) %>% pull()
+```
+
+```{r, include = FALSE}
+delay_2022 = get_resource(delay_2022_ids)
+delay_2022 = clean_names(delay_2022)
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+delay_2022f <- delay_2022 %>% filter(line %in% c("BD", "YU", "SHP", "SRT"))
+delay_2022f %>%
+  group_by(line, station) %>%
+  summarise(mean_delay = mean(min_delay)) %>%
+  arrange(-mean_delay) %>%
+  slice(1:5) %>%
+  ggplot(aes(x = station,
+             y = mean_delay,
+             fill = 2)) +
+  geom_col() +
+  xlab("Station") + 
+  ylab("Average Delay") + 
+  labs(title = "Highest Delay Stations by Line") +
+  facet_wrap(vars(line), 
+             scales = "free_y",
+             nrow = 4) +
+  coord_flip() + 
+  theme_minimal() + 
+  theme(legend.position = "none")
+```
+
+# Q2 & Q3
+
+```{r, message = FALSE, warning = FALSE}
+mayor_cont_list = list_package_resources("f6651a40-2f52-46fc-9e04-b760c16edd5c")
+mayor_cont_full = get_resource("5b230e92-0a22-4a15-9572-0b19cc222985")
+mayor_cont = mayor_cont_full$`2_Mayor_Contributions_2014_election.xls` %>% 
+  #filter(...12 != "Office") %>% 
+  row_to_names(1) %>% 
+  clean_names()
+  # rename("contributor" = `2014 Municipal Election - List of Contributors to Mayoralty Candidates`,
+  #        "address" = ...2,
+  #        "postal" = ...3,
+  #        "amount" = ...4,
+  #        "contribution_desc" = ...5,
+  #        "service_desc" = ...6,
+  #        "contributor_desc" = ...7,
+  #        "relation_to_cand" = ...8,
+  #        "manager" = ...9,
+  #        "rep" = ...10,
+  #        "candidate" = ...11,
+  #        "office" = ...12,
+  #        "ward" = ...13) 
+head(mayor_cont)
+```
+
+```{r}
+#View(mayor_cont %>% group_by(amount) %>% summarise(n = n()))
+```
+
+
+# Q4
+
+Summaries
+```{r, message = FALSE, warning = FALSE}
+summary(mayor_cont)
+```
+
+NAs
+```{r, message = FALSE, warning = FALSE}
+colSums(is.na(mayor_cont))
+```
+
+In this instance, we first find that the column tracking the amount of the contribution made is currently represented as a character value, which we will change to a numeric.
+Second, we notice that multiple columns have many NAs, and some are filled entirely with missing values, however, given the questions we will be looking at, this will not cause any major problems, thus we can move on with our inspection.
+
+```{r, message = FALSE, warning = FALSE}
+mayor_cont$contribution_amount <- as.numeric(mayor_cont$contribution_amount)
+```
+
+# Q5
+
+```{r, message = FALSE, warning = FALSE, fig.height=4, fig.width=8, fig.align='center'}
+par(mfrow = c(1, 2), mai = c(0.8, 0.9, 0.4, 0.1))
+# plot(mayor_cont$contribution_amount, ylab = "Contribution Amount",
+#      main = "Plot of Contributions")
+boxplot(mayor_cont$contribution_amount, id.method = "contribution_amount", 
+        main = "Boxplot of Contributions",
+        ylab = "Contribution Amount")
+qqnorm(mayor_cont$contribution_amount)
+```
+
+We notice that a large majority of the contributions made in this dataset are below \$3000. Examining the data more closely, we can see a relatively evenly spaced distribution of contributions up until \$2500, which is where many contributors reach their maximums. However, after \$2500, we can see that there are 11 more contributions that have been made. Among these, 10 of the contributions are made from the candidate to themselves, while the last remaing contribution has the lowest valuation and was in the form of a photography service. Thus, it clearly seems that this group of self-funding contributions are outliers in the data, and should be removed if we wish to inspect the distributions any further.
+
+
+```{r, message = FALSE, warning = FALSE, fig.height=4, fig.width=8, fig.align='center'}
+par(mfrow = c(1, 2), mai = c(0.8, 0.9, 0.4, 0.1))
+mayor_cont_outliers = mayor_cont %>% 
+  #filter(id != 3013, id != 3024, id != 3023, id != 3022, id != 3021, id != 3013)
+  filter(contribution_amount <= 2500)
+#mayor_cont_outliers
+# plot(mayor_cont_outliers$contribution_amount, ylab = "Contribution Amount",
+#      main = "Plot of Contributions")
+boxplot(mayor_cont_outliers$contribution_amount, id.method = "contribution_amount", 
+        main = "Boxplot of Contributions",
+        ylab = "Contribution Amount")
+qqnorm(mayor_cont_outliers$contribution_amount)
+```
+
+
+Finally, we can see a much clearer picture of the distribution of contribution amounts after removing the previous outliers. As we mentioned, a majority of these contributions are below \$2500, and the flat section on the qq-plot displays the significant number of contributors that contribute exactly \$2500.
+
+
+
+
+# Q6
+
+```{r}
+mayor_cont_total = mayor_cont %>% 
+  group_by(candidate) %>% 
+  summarise(total_amount = sum(contribution_amount)) %>% 
+  arrange(-total_amount) %>% 
+  slice(1:5)
+kable(head(mayor_cont_total))
+
+mayor_cont_mean = mayor_cont %>% 
+  group_by(candidate) %>% 
+  summarise(average_amount = mean(contribution_amount)) %>% 
+  arrange(-average_amount) %>% 
+  slice(1:5)
+kable(head(mayor_cont_mean))
+
+mayor_cont_count = mayor_cont %>% 
+  group_by(candidate) %>% 
+  summarise(contributions_received = n()) %>% 
+  arrange(-contributions_received) %>% 
+  slice(1:5)
+kable(head(mayor_cont_count))
+```
+
+# Q7
+
+```{r}
+mayor_cont_total = mayor_cont %>%  
+  filter(contributors_name != candidate) %>% 
+  group_by(candidate) %>% 
+  summarise(total_amount = sum(contribution_amount)) %>% 
+  arrange(-total_amount) %>% 
+  slice(1:5)
+kable(head(mayor_cont_total))
+
+mayor_cont_mean = mayor_cont %>%  
+  filter(contributors_name != candidate) %>% 
+  group_by(candidate) %>% 
+  summarise(average_amount = mean(contribution_amount)) %>% 
+  arrange(-average_amount) %>% 
+  slice(1:5)
+kable(head(mayor_cont_mean))
+
+mayor_cont_count = mayor_cont %>%  
+  filter(contributors_name != candidate) %>% 
+  group_by(candidate) %>% 
+  summarise(contributions_received = n()) %>% 
+  arrange(-contributions_received) %>% 
+  slice(1:5)
+kable(head(mayor_cont_count))
+```
+
+# Q8
+
+For all contributions, the total number of multi-contributors is:
+
+```{r}
+multi_dono1 = mayor_cont %>% mutate(
+  unique_conts = paste(contributors_name, candidate, sep = "-")
+) %>% 
+  select(contributors_name, unique_conts, candidate) %>% 
+  group_by(contributors_name) %>% 
+  summarise(num = sum(length(unique(unique_conts)))) %>% 
+  filter(num > 1)
+
+length(multi_dono1$contributors_name)
+```
+
+OR, without self-funding
+
+```{r}
+multi_dono2 = mayor_cont %>% filter(contributors_name != candidate) %>% 
+  mutate(
+  unique_conts = paste(contributors_name, candidate, sep = "-")
+) %>% 
+  select(contributors_name, unique_conts, candidate) %>% 
+  group_by(contributors_name) %>% 
+  summarise(num = sum(length(unique(unique_conts)))) %>% 
+  filter(num > 1)
+
+length(multi_dono2$contributors_name)
+```
+

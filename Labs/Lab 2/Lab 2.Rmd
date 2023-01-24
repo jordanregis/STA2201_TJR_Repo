@@ -131,8 +131,7 @@ boxplot(mayor_cont$contribution_amount, id.method = "contribution_amount",
 qqnorm(mayor_cont$contribution_amount)
 ```
 
-We notice that a large majority of the contributions made in this dataset are below \$3000. Examining the data more closely, we can see a relatively evenly spaced distribution of contributions up until \$2500, which is where many contributors reach their maximums. However, after \$2500, we can see that there are 11 more contributions that have been made. Among these, 10 of the contributions are made from the candidate to themselves, while the last remaing contribution has the lowest valuation and was in the form of a photography service. Thus, it clearly seems that this group of self-funding contributions are outliers in the data, and should be removed if we wish to inspect the distributions any further.
-
+We notice that a large majority of the contributions made in this dataset are below \$3000. Examining the data more closely, we can see a relatively evenly spaced distribution of contributions up until \$2500, which is where many contributors reach their maximums. However, after \$2500, we can see that there are 11 more contributions that have been made. Among these, 10 of the contributions are made from the candidate to themselves, while the last remaining contribution has the lowest valuation and was in the form of a photography service. Thus, it clearly seems that the group of self-funding contributions are outliers in the data, and should be removed if we wish to inspect the distributions any further. We have also removed the photography service contribution for the sake of a better inspection of the distribution.
 
 ```{r, message = FALSE, warning = FALSE, fig.height=4, fig.width=8, fig.align='center'}
 par(mfrow = c(1, 2), mai = c(0.8, 0.9, 0.4, 0.1))

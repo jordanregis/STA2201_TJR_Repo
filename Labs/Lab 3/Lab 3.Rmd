@@ -1,0 +1,178 @@
+---
+title: "STA2201 Lab #3"
+author: "Timothy Jordan Regis"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include=FALSE}
+library(ggplot2)
+library(kableExtra)
+library(dplyr)
+library(tidyverse)
+```
+
+
+
+# Q1
+
+$$Y|\theta = \binom{n}{y} \theta^y(1 - \theta)^{n - y}$$
+
+Log-Likelihood:
+
+$$= log\binom{n}{y} + ylog(\theta) + (n - y)log(1 - \theta)$$
+
+$$\frac{\partial }{\partial \theta} = 0:$$
+
+$$0 =  \frac{y}{\theta} - \frac{n - y}{1 - \theta}$$
+
+$$...$$
+
+$$\hat\theta = \frac{y}{n} = \frac{118}{129}$$
+
+Variance for CI:
+
+$$Var[\hat\theta] = \frac{Var[y]}{n^2}$$
+
+$$ = \frac{n\hat\theta(1 - \hat\theta)}{n^2}$$
+$$ = \frac{\hat\theta(1 - \hat\theta)}{n}$$
+$$ = \frac{\frac{118}{129}(1 - \frac{118}{129})}{129}$$
+
+95% CI:
+
+```{r}
+
+y = 118
+n = 129
+theta_hat = y/n
+
+var_theta_hat = (theta_hat*(1 - theta_hat))/n
+
+# CI:
+
+Upper = theta_hat + qnorm(0.975) * sqrt(var_theta_hat)
+Lower = theta_hat - qnorm(0.975) * sqrt(var_theta_hat)
+
+kable(data.frame(cbind(Lower, "Estimate" = theta_hat, Upper)), digits = 3)
+```
+
+
+# Q2
+
+As we saw in lecture, a Beta(1, 1) distribution has a pdf of $p(\theta) = 1$, and the posterior distribution of a Beta(a, b) prior and Binomial(y, n, $\theta$) is distributed as:
+
+$Beta(y + a, n - y + b)$
+
+With expectation:
+
+$\frac{a}{a + b}$
+
+Thus, the posterior mean is:
+
+$$E[P(\theta|y)] = \frac{y + 1}{y + 1 + n - y + 1} = \frac{y + 1}{n + 2}$$
+```{r}
+theta_hat2 = (y + 1)/(n + 2)
+
+Upper2 = qbeta(0.975, shape1 = y + 1, shape2 = n - y + 1)
+Lower2 = qbeta(0.025, shape1 = y + 1, shape2 = n - y + 1)
+```
+
+With the following 95% CI:
+```{r}
+kable(data.frame(cbind("Lower" = Lower2, "Estimate" = theta_hat2, "Upper" = Upper2)), digits = 3)
+```
+
+
+# Q3
+
+With a Beta(10, 10) prior this assumes we have seen 9 successes and 9 failures in the data, and thus concentrates its distribution more around 0.5 than a Beta(1, 1) prior. Therefore this prior assumes we know considerably more information of the true value of theta than the Beta(1, 1) prior
+
+
+# Q4
+
+
+```{r, fig.align='center', fig.width=8, fig.height=5}
+vals = c()
+theta = seq(0, 1, 0.001)
+
+for(i in 1:length(theta)){
+  vals[i] = dbinom(118, 129, theta[i])
+}
+
+ggplot() + 
+  xlim(0, 1) + 
+  stat_function(aes(colour = 2),
+                fun = dbinom,
+                args = list(x = y, size = n)) +
+  labs(title = "Likelihood") + 
+  xlab("Theta") + 
+  ylab("Likelihood") + 
+  theme_minimal() + 
+  theme(legend.position = "none")
+# plot(y = vals, x = theta, type = "l",
+#      ylab = "Density/Likelihood",
+#      xlab = "Theta",
+#      col = "red")
+
+hist(vals,
+     xlab = "Likelihood",
+     main = "Histogram of Likelihoods",
+     col = "steelblue")
+
+```
+
+
+```{r, fig.align='center', fig.width=8, fig.height=5}
+ggplot() + 
+  xlim(0, 1) + 
+  stat_function(aes(colour = "Beta(1, 1) Prior"), 
+                fun = dbeta, 
+                args = list(shape1 = 1, shape2 = 1)) +
+  stat_function(aes(colour = "Beta(y + 1, n - y + 1) Post."), 
+                fun = dbeta, 
+                args = list(shape1 = y + 1, shape2 = n - y + 1)) +
+  stat_function(aes(colour = "Beta(10, 10) Prior"), 
+                fun = dbeta, 
+                args = list(shape1 = 10, shape2 = 10)) +
+  stat_function(aes(colour = "Beta(y + 10, n - y + 10) Post."), 
+                fun = dbeta, 
+                args = list(shape1 = y + 1, shape2 = n - y + 1)) + 
+  labs(title="Priors & Posteriors") + 
+  xlab("Theta") + 
+  ylab("Density") + 
+  scale_colour_discrete(name = "Line") + 
+  theme_minimal()
+```
+
+
+
+
+As we can see, the Beta(1, 1) prior is extremely uninformative, as it is represented by the completely flat red line. On the other hand, the Beta(10, 10) prior is considerably more important with its concentrated density around 0.6.
+The posteriors, however, are exactly the same, where the B(y + 1, n - y + 1)  and B(y + 10, n - y + 10) completely overlap each other.
+
+
+
+# Q5
+
+An uninformative prior we could use here could be any uniformly distributed prior around 0, such as Uniform(-10, 10) where it suggests equal assumptions for a player performing better or worse after the program.
+
+A more informative prior would we one with a high concentration above 0, such as Beta(9, 10) which suggests a much greater improvement in a player after the program.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

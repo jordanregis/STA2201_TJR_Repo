@@ -75,7 +75,7 @@ $\frac{a}{a + b}$
 
 Thus, the posterior mean is:
 
-$$E[P(\theta|y)] = \frac{y + 1}{y + 1 + n - y + 1} = \frac{y + 1}{n + 2}$$
+$$E[P(\theta|y)] = \frac{y + 1}{y + 1 + n - y + 1} = \frac{y + 1}{n + 2} = \frac{119}{131}$$
 ```{r}
 theta_hat2 = (y + 1)/(n + 2)
 
@@ -178,7 +178,7 @@ The posteriors, show a less noticeable difference, where the main concentration 
 
 
 
-An uninformative prior we could use here could be any uniformly distributed prior around 0, such as Uniform(-10, 10) where it suggests equal assumptions for a player performing better or worse after the program, in turn leaving the likelihood's estimate fairly unchanged.
+An uninformative prior we could use here could be any uniformly distributed prior, such as Uniform(0, 1) where it suggests no assumptions for a player performing better or worse after the program, in turn leaving the likelihood's estimate unchanged and similar to the posterior.
 
 A more informative prior would be one with a high concentration above 0, such as Beta(20, 2) which suggests a much greater average improvement in success probability after the program.
 

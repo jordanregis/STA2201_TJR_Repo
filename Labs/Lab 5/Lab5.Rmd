@@ -1,0 +1,327 @@
+---
+title: "STA2201 Lab #5"
+author: "Timothy Jordan Regis"
+date: "13/02/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r, include=FALSE}
+library(tidyverse)
+library(rstan)
+library(tidybayes)
+library(here)
+library(readr)
+library(kableExtra)
+library(ggplot2)
+#install.packages("kableExtra")
+```
+
+```{r}
+kidiq <- read_rds(here("~/Grad/STA2201/","kidiq.RDS"))
+head(kidiq)
+```
+
+
+
+```{r}
+y <- kidiq$kid_score
+mu0 <- 80
+sigma0 <- 10
+# named list to input for stan function
+data <- list(y = y, 
+             N = length(y), 
+             mu0 = mu0,
+             sigma0 = sigma0)
+```
+
+
+
+```{r, include=FALSE}
+fit <- stan(file = here("~/Grad/STA2201/kids2.stan"),
+            data = data,
+            chains = 3,
+            iter = 500)
+```
+
+
+```{r}
+fit
+```
+
+## Question 1
+
+Use plots or tables to show three interesting observations about the data. Remember:
+
+- Explain what your graph/ tables show
+- Choose a graph type that's appropriate to the data type
+
+```{r,include=FALSE}
+summary(kidiq)
+```
+
+
+```{r}
+# boxplot(kidiq$mom_iq ~ as.factor(kidiq$mom_age))
+# boxplot(kidiq$kid_score ~ as.factor(kidiq$mom_hs))
+# plot(x = kidiq$mom_iq, y = kidiq$kid_score, col = as.factor(kidiq$mom_hs))
+# plot(x = kidiq$mom_age, y = kidiq$kid_score)
+# plot(x = kidiq$mom_age, y = kidiq$mom_iq)
+# plot(y = kidiq$mom_hs, x = kidiq$kid_score)
+
+```
+
+```{r, include=FALSE}
+hm = kidiq %>% group_by(mom_age) %>% summarise(mean_iq = mean(mom_iq),
+                                               mean_hs = mean(mom_hs),
+                                               mean_kid = mean(kid_score))
+
+hm
+```
+
+```{r, include=FALSE}
+plot(hm$mom_age, hm$mean_iq, type = "l", col = 2)
+plot(hm$mom_age, hm$mean_hs, type = "l", col = 2)
+plot(hm$mom_age, hm$mean_kid, type = "l", col = 2)
+```
+
+```{r}
+colors <- c("#83C363", #"#96BD93", # Orange
+            "#9E6B9D") 
+```
+
+
+```{r}
+boxplot(kidiq$kid_score ~ as.factor(kidiq$mom_hs), xlab = "Mom Finished Highschool", ylab = "Kid's Score", col = colors,
+        main = "Kid's Score Distribution by Mother's Education")
+```
+
+In our first graph, we plot boxplots of the distribution of kid scores, grouped by the status of the mother's high school education. As we can see, there is a slightly higher average of scores for kids whose mothers had successfully completed high school education, but this is only a small difference as we can see each box overlapping by a considerable amount. We can also see that the lowest observations are seen in the no-high school group, with the highest obersvations landing in the high school group.
+The lack of a significant difference here is somewhat surprising as we would likely expect a mother's education to have more impact on a child, but this result could be representative of the fact that a child's intelligence may come more from their environment or school.
+
+
+```{r}
+boxplot(kidiq$mom_iq ~ as.factor(kidiq$mom_age), xlab = "Mother's Age", ylab = "Mother's IQ", col = "#9E6B9D", main = "Mother's IQ Distribution by Age")
+```
+
+In our second plot, we have displayed the distribution of the mothers' IQ scores across each age group to determine if there's a significant relationship between the two variables. As we can see, all bars overlap a considerable amount, with no significant differences being shown. However, we do notice a slight trend, in the first half of the graph, before the age 24, there is little change at all between the IQ distribution, whereaas after age 24, there is a small positive relationship between age and IQ, with the mothers that are 28 years old holding the highest IQs on average. This result is potentially suggesting that mothers who have children later in life tend to be more intelligent, but the significant overlap provents any definitive conclusion from being made.
+
+
+
+```{r}
+
+plot(x = kidiq$mom_iq, y = kidiq$kid_score, xlab = "Mother's IQ", ylab = "Kid's Score", main = "Mother's IQ against Child's Score", col = colors[as.factor(kidiq$mom_hs)], pch = 19)
+legend("bottomright",
+       legend = c("No", "Yes"),
+       title = "Mom Completed HS",
+       pch = 19,
+       col = colors)
+```
+
+Finally, we plot the mother's IQ against their kid's score, coloring by the mother's high school education status. As we can see, there is a subtle positive relationship between a mother's IQ and their child's score. Furthermore, this trend holds if we look separately at the no-high school group (green) and the high school group (purple), where we can also see that the no-high school group tends to see lower scores in general, agreeing with our previous boxplot. This result is somewhat expected, however, we were surprised at how well the relationship held in each group, as well as the closeness of points between each high school group.
+
+## Question 2
+
+Change the prior to be much more informative (by changing the standard deviation to be 0.1). Rerun the model. Do the estimates change? Plot the prior and posterior densities. 
+
+
+```{r}
+y <- kidiq$kid_score
+mu0 <- 80
+sigma0 <- 0.10
+# named list to input for stan function
+data <- list(y = y, 
+             N = length(y), 
+             mu0 = mu0,
+             sigma0 = sigma0)
+```
+
+```{r, include=FALSE}
+fitq2 <- stan(file = here("~/Grad/STA2201/kids2.stan"),
+            data = data,
+            chains = 3,
+            iter = 500)
+```
+
+```{r}
+fit
+fitq2
+```
+
+As we can see, the estimates do change slightly, going from 86.74 to 80.06 on mu, 20.40 to 21.50 on sigma, and -1525.72 to -1548.40 on lp. Furthermore, we also see changes in the se_mean and sd of each estimator. (Example from one run, I can't figure out how to save runs yet)
+
+```{r, include = FALSE}
+dsamplesq2 <- fitq2  %>% 
+  gather_draws(mu, sigma) # gather = long format
+dsamplesq2
+# wide format
+fitq2  %>%  spread_draws(mu, sigma)
+# quickly calculate the quantiles using 
+dsamplesq2 %>% 
+  median_qi(.width = 0.8)
+```
+
+```{r}
+dsamplesq2 %>% 
+  filter(.variable == "mu") %>% 
+  ggplot(aes(.value, color = "posterior")) + geom_density(size = 1) + 
+  xlim(c(70, 100)) + 
+  stat_function(fun = dnorm, 
+        args = list(mean = mu0, 
+                    sd = sigma0), 
+        aes(colour = 'prior'), size = 1) +
+  scale_color_manual(name = "", values = c("prior" = "red", "posterior" = "black")) + 
+  ggtitle("Prior and posterior for mean test scores") + 
+  xlab("score")
+  
+```
+
+As we can see, the prior is now much more narrow than previously
+
+## Question 3
+
+a) Confirm that the estimates of the intercept and slope are comparable to results from `lm()` 
+b) Do a `pairs` plot to investigate the joint sample distributions of the slope and intercept. Comment briefly on what you see. Is this potentially a problem?
+
+### a)
+
+```{r, include=FALSE}
+X <- as.matrix(kidiq$mom_hs, ncol = 1) # force this to be a matrix
+K <- 1
+data <- list(y = y, N = length(y), 
+             X =X, K = K)
+fit2 <- stan(file = here("~/Grad/STA2201/kids3.stan"),
+            data = data, 
+            iter = 1000)
+```
+
+```{r}
+fit2
+```
+
+```{r}
+summary(lm(kid_score ~ mom_hs, data = kidiq))
+```
+
+Results are extremely close, only off by a few decimal points:
+
+(Example from one Run (couldn't figure out how to save))
+
+77.92 vs. 77.55 for the Intercept, and
+
+11.30 vs. 11.77 for the mother's high school education
+
+
+### b)
+
+```{r, warning=FALSE, message=FALSE}
+pairs(fit2, pars = c("alpha",  "beta", "sigma"))
+```
+
+As we can see, while their distributions with sigma are fine, we can see that the joint distribution between alpha and beta[1] is highly correlated by the distinct grouping of points and sharp decreasing slope. This may be a potential problem as it disrupts the model's fit and sampling abilities.
+
+## Question 4
+
+Add in mother's IQ as a covariate and rerun the model. Please mean center the covariate before putting it into the model. Interpret the coefficient on the (centered) mum's IQ. 
+
+```{r, include=FALSE}
+mom_dat = data.frame(mom_hs = kidiq$mom_hs, mom_iq_cent = (kidiq$mom_iq - mean(kidiq$mom_iq)))
+X <- as.matrix(mom_dat, ncol = 2) # force this to be a matrix
+# X2 <- as.matrix(kidiq$mom_iq, ncol = 1)  # force this to be a matrix
+K <- 2
+data <- list(y = y, N = length(y), 
+             X =X, K = K)
+fit3 <- stan(file = here("~/Grad/STA2201/kids3new.stan"),
+            data = data, 
+            iter = 1000)
+```
+
+```{r}
+fit3
+```
+
+With an estimate of 0.57, our model suggests that a 1 unit increase in the mother's mean centered IQ leads to an increase in their child's score of approximately 0.57.
+
+## Question 5 
+
+Confirm the results from Stan agree with `lm()`
+
+```{r}
+fit3
+
+kidiq_q5 = kidiq %>% mutate(mom_iq_c = mom_iq - mean(mom_iq))
+summary(lm(kid_score ~ mom_hs + mom_iq_c, data = kidiq_q5))
+```
+
+As we can see, there is only a small decimal point difference between the lm estimates and Stan's:
+
+(Example from one run)
+
+82.32 vs. 82.12 for the Intercept
+
+5.73 vs. 5.95 for the mother's high school education
+
+0.57 vs. 0.56 for the mother's IQ
+
+
+
+## Question 6
+
+Plot the posterior estimates of scores by education of mother for mothers who have an IQ of 110. 
+
+
+
+```{r}
+mean_q6 = mean(kidiq$mom_iq)
+
+p_est <- rstan::extract(fit3)
+p_est_d <- as.data.frame(do.call(cbind, p_est))
+p_est_d %>% 
+  mutate(p_est_nohs = (p_est_d[["alpha"]] + p_est_d[["V3"]] * (110 - mean_q6)),
+         p_est_hs = (p_est_d[["alpha"]] + p_est_d[["V2"]] + p_est_d[["V3"]] * (110 - mean_q6))) %>%
+  mutate(no_hs = p_est_nohs, # no high school is just the intercept
+          hs = p_est_hs) %>% 
+  select(no_hs, hs) %>% 
+  pivot_longer(no_hs:hs, names_to = "education", values_to = "estimated_score") %>% 
+  ggplot(aes(y = education, x = estimated_score)) +
+  stat_halfeye(fill = "#9E6B9D") + 
+  theme_minimal() + 
+  xlab("Score") + 
+  ylab("Mother's High School") +
+  theme(plot.title = element_text(size=10))+
+  ggtitle("Posterior Estimates of Scores from Mothers with IQ = 110.")
+
+```
+
+## Question 7
+
+Generate and plot (as a histogram) samples from the posterior predictive distribution for a new kid with a mother who graduated high school and has an IQ of 95.
+
+
+```{r}
+p_est2 <- rstan::extract(fit3)
+p_est2_hs <- data.frame(kid_score = p_est2[["alpha"]] + p_est2[["beta"]][,1] + p_est2[["beta"]][,2] * (95 - mean_q6))
+
+p_est2_hs %>%
+  ggplot(aes(x = kid_score)) + 
+  geom_histogram(color = "white", fill = "#9E6B9D") +
+  scale_fill_manual(values=c("#69b3a2", "#404080")) +
+  ggtitle("Predicted Scores for a Kid") +
+  labs(subtitle = "Whose Mother Graduated High School with an IQ of 95") +
+  theme_minimal() +
+  xlab("Kid's score") + 
+  ylab("Frequency")
+
+```
+
+
+
+
+
+
+
+

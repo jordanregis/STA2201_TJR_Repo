@@ -11,7 +11,7 @@ parameters {
 }
 model {
   // Log-likelihood
-  target += normal_lpdf(log_weight | beta[1] + beta[2] * z + beta[3]* log_gest + beta[4]* log_gest .* z, sigma);
+  target += normal_lpdf(log_weight | beta[1] + beta[2] * z + beta[3]* log_gest + beta[4]* log_gest * z, sigma);
 
   // Log-priors
   target += normal_lpdf(sigma | 0, 1)

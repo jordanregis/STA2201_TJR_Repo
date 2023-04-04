@@ -1,0 +1,291 @@
+---
+title: "STA2201 Lab 11!"
+author: "Timothy Jordan Regis"
+date: "03/04/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Overview
+
+In this lab you'll be fitting a second-order P-Splines regression model to foster care entries by state in the US, projecting out to 2030. 
+
+```{r, include = FALSE}
+library(tidyverse)
+library(here)
+library(rstan)
+library(tidybayes)
+library(geofacet)
+```
+
+```{r}
+getsplines <- function (x.i, # vector of years 
+                        I, # knot spacing  
+                        degree = 3) 
+{
+  x0 <- max(x.i) - 0.5 * I
+  knots <- seq(x0 - 1000 * I, x0 + 1000 * I, I)
+  while (min(x.i) < knots[1]) knots <- c(seq(knots[1] - 1000 * 
+                                               I, knots[1] - I, I), knots)
+  while (max(x.i) > knots[length(knots)]) knots <- c(knots, 
+                                                     seq(knots[length(knots)] + I, knots[length(knots)] + 
+                                                           1000 * I, I))
+  Btemp.ik <- splines::bs(x.i, knots = knots[-c(1, length(knots))], 
+                          degree = degree, Boundary.knots = knots[c(1, length(knots))])
+  indicesofcolswithoutzeroes <- which(apply(Btemp.ik, 2, sum) > 
+                                        0)
+  startnonzerocol <- indicesofcolswithoutzeroes[1]
+  endnonzerocol <- indicesofcolswithoutzeroes[length(indicesofcolswithoutzeroes)]
+  B.ik <- Btemp.ik[, startnonzerocol:endnonzerocol]
+  colnames(B.ik) <- paste0("spline", seq(1, dim(B.ik)[2]))
+  knots.k <- knots[startnonzerocol:endnonzerocol]
+  names(knots.k) <- paste0("spline", seq(1, dim(B.ik)[2]))
+  return(list(B.ik = B.ik, # the basis splines
+              knots.k = knots.k # knot placement
+  ))
+}
+```
+
+
+Here's the data
+
+```{r, include=FALSE}
+df11 <- read_csv("https://raw.githubusercontent.com/MJAlexander/applied-stats-2023/main/data/fc_entries.csv")
+```
+
+
+```{r}
+head(df11)
+```
+
+## Question 1
+
+Make a plot highlighting trends over time by state. Might be a good opportunity to use `geofacet`. Describe what you see in a couple of sentences. 
+
+
+```{r, echo = TRUE}
+df11 %>% ggplot(aes(year, ent_pc)) + 
+  geom_line() + 
+  facet_geo(~state) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+```
+
+As we can see, when left on the same scales, variation by year is quite similar across states. The few exceptions include Montana, West Virginia, and Vermont, which show somewhat significant increasing trends over time, while the District of Columbia tends to see a decreasing relationship over time. We can also notice some states have higher baseline levels of foster care entries, such as Vermont and Arizona, however, it becomes difficult to predict why this may be the case without further investigating the characteristics from each state. Alternatively, we can also let the y-axis be free and have different scales for each plot. In doing so, we do see many different relationships, but this factor massively increases the complexity and length of interpretations, requiring us to finely explain the results of many states that would clutter up this assignment.
+
+
+
+
+
+## Question 2
+
+Fit a hierarchical second-order P-Splines regression model to estimate the (logged) entries per capita over the period 2010-2017. The model you want to fit is
+
+$$
+\begin{aligned}
+y_{st} &\sim N(\log \lambda_{st}, \sigma^2_{y,s})\\
+\log \lambda_{st} &= \alpha_kB_k(t)\\
+\Delta^2\alpha_k &\sim N(0, \sigma^2_{\alpha,s})\\
+\log \sigma_{\alpha,s} &\sim N(\mu_{\sigma}, \tau^2)
+\end{aligned}
+$$
+Where $y_{s,t}$ is the logged entries per capita for state $s$ in year $t$. Use cubic splines that have knots 2.5 years apart and are a constant shape at the boundaries. Put standard normal priors on standard deviations and hyperparameters. 
+
+
+```{r, include = FALSE}
+years = unique(df11$year)
+N = length(years)
+y = log(df11 %>% dplyr::select(state, year, ent_pc) %>% 
+  pivot_wider(names_from = "state", values_from = "ent_pc") %>% 
+  dplyr::select(-year) %>% 
+  as.matrix())
+
+res = getsplines(years, 2.5)
+B = res$B.ik
+K = ncol(B)
+
+stan_data_11 <- list(N = N, y = y,
+                     K = K, S = length(unique(df11$state)),
+                     B = B)
+
+mod11 <- stan(data = stan_data_11, file = "~/Grad/STA2201/Lab 11/lab11.stan")
+```
+
+
+
+
+```{r}
+proj_years <- 2018:2030
+# Note: B.ik are splines for in-sample period
+# has dimensions i (number of years) x k (number of knots)
+# need splines for whole period
+B.ik_full <- getsplines(c(years, proj_years), 2.5)$B.ik
+K <- ncol(B) # number of knots in sample
+K_full <- ncol(B.ik_full) # number of knots over entire period
+proj_steps <- K_full - K # number of projection steps
+# get your posterior samples
+alphas <- extract(mod11)[["alpha"]]
+sigmas <- extract(mod11)[["sigma_a"]] # sigma_alpha
+sigma_ys <- extract(mod11)[["sigma_y"]]
+nsims <- nrow(alphas)
+
+# first, project the alphas
+alphas_proj <- array(NA, c(nsims, proj_steps, length(unique(df11$state))))
+#set.seed(1098)
+# project the alphas
+for(j in 1:length(unique(df11$state))){
+  first_next_alpha <- rnorm(n = nsims, mean = 2*alphas[,K,j] - alphas[,K-1,j], sd = sigmas[,j])
+  second_next_alpha <- rnorm(n = nsims, mean = 2*first_next_alpha - alphas[,K,j],sd = sigmas[,j])
+  alphas_proj[,1,j] <- first_next_alpha
+  alphas_proj[,2,j] <- second_next_alpha
+  # now project the rest
+  for(i in 3:proj_steps){ #!!! not over years but over knots
+    alphas_proj[,i,j] <- rnorm(n = nsims,
+    mean = 2*alphas_proj[,i-1,j] - alphas_proj[,i-2,j],
+    sd = sigmas[,j])
+  }
+}
+# now use these to get y's
+y_proj <- array(NA, c(nsims, length(proj_years), length(unique(df11$state))))
+for(i in 1:length(proj_years)){ # now over years
+for(j in 1:length(unique(df11$state))){
+all_alphas <- cbind(alphas[,,j], alphas_proj[,,j] )
+this_lambda <- all_alphas %*% as.matrix(B.ik_full[length(years)+i, ])
+y_proj[,i,j] <- rnorm(n = nsims, mean = this_lambda, sd = sigma_ys[,j])
+}
+}
+```
+
+## Question 3
+
+Project forward entries per capita to 2030. Pick 4 states and plot the results (with 95% CIs). Note the code to do this in R is in the lecture slides. 
+
+
+
+
+```{r, message=FALSE, warning=FALSE}
+
+states = c("California", "New York" , "Florida", "Ohio")
+
+ind = which(unique(df11$state) %in% states)
+y_proj_states = y_proj[, , ind]
+
+state1 <- as.tibble(y_proj_states[, , 1])
+state2 <- as.tibble(y_proj_states[, , 2])
+state3 <- as.tibble(y_proj_states[, , 3])
+state4 <- as.tibble(y_proj_states[, , 4])
+
+
+proj_1 <- state1 %>% 
+  summarize(across(everything(), list(median = median, 
+                                      q2.5 = ~quantile(., probs = 0.025), 
+                                      q97.5 = ~quantile(., probs = 0.975)))) %>%
+  pivot_longer(cols = everything(), 
+               names_to = c(".value", "column"), 
+               names_sep = "_")
+proj_1 <- data.frame(t(proj_1[,2:ncol(proj_1)])) %>% 
+  mutate(year = proj_years,
+         state = states[1])
+
+
+proj_2 <- state2 %>% 
+  summarize(across(everything(), list(median = median, 
+                                      q2.5 = ~quantile(., probs = 0.025), 
+                                      q97.5 = ~quantile(., probs = 0.975)))) %>%
+  pivot_longer(cols = everything(), 
+               names_to = c(".value", "column"), 
+               names_sep = "_")
+proj_2 <- data.frame(t(proj_2[,2:ncol(proj_2)])) %>% 
+  mutate(year = proj_years,
+         state = states[2])
+
+proj_3 <- state3 %>% 
+  summarize(across(everything(), list(median = median, 
+                                      q2.5 = ~quantile(., probs = 0.025), 
+                                      q97.5 = ~quantile(., probs = 0.975)))) %>%
+  pivot_longer(cols = everything(), 
+               names_to = c(".value", "column"), 
+               names_sep = "_")
+proj_3 <- data.frame(t(proj_3[,2:ncol(proj_3)])) %>% 
+  mutate(year = proj_years,
+         state = states[3])
+
+proj_4 <- state4 %>% 
+  summarize(across(everything(), list(median = median, 
+                                      q2.5 = ~quantile(., probs = 0.025), 
+                                      q97.5 = ~quantile(., probs = 0.975)))) %>%
+  pivot_longer(cols = everything(), 
+               names_to = c(".value", "column"), 
+               names_sep = "_")
+proj_4 <- data.frame(t(proj_4[,2:ncol(proj_4)])) %>% 
+  mutate(year = proj_years,
+         state = states[4])
+
+full_new_proj <- rbind(proj_1, proj_2, proj_3, proj_4) %>% 
+  mutate(
+    Med = exp(as.numeric(X1))/1000,
+    Upper = exp(as.numeric(X3))/1000,
+    Lower = exp(as.numeric(X2))/1000
+  )
+
+df11 %>% 
+  filter(state %in% states) %>% 
+  ggplot(aes(x = year, color = state)) + 
+  geom_point(aes(y = (ent_pc)/1000)) +
+  geom_line(aes(y = (ent_pc)/1000)) + 
+  
+  geom_line(data = full_new_proj, 
+            aes(x = year, y = Med, color = state), 
+            linewidth = 1)  +
+  geom_ribbon(data = full_new_proj, 
+              aes(x = year, ymax = Upper, ymin = Lower, fill = state), 
+              alpha = 0.1, colour = NA) +
+  theme_bw() + 
+  xlab("Year") + 
+  ylab("FC Entries Per Capita") +
+  ggtitle("Estimated and projected Foster Care Entries w/ second-order P-splines") + 
+  ylim(-0.001, 0.1)
+```
+
+For our plot we have chosen some of the most popularly known states including California, Florida, New York, and Ohio. As we can see, Ohio has a significantly higher predicted trend than the other states, which remain quite flat, but the high standard error on our plots suggest that we cannot be 100% certain about this conclusion.
+
+Note: I'm not sure why the CIs behave the way they do (cutting off before reaching the end). I think this may be due to them simply being too large for R to plot, but I do believe these suggest an increasing level of variation as the predictions stretch out further as expected. I also needed to cut the y-axis off to ensure that the trends were at least somewhat visible, I think this may be causing the problem, but it is uninterpretable otherwise (Included at the end).
+
+
+## Question 4 (bonus)
+
+P-Splines are quite useful in structural time series models, when you are using a model of the form 
+$$
+f(y_t) = \text{systematic part} + \text{time-specific deviations}
+$$
+where the systematic part is model with a set of covariates for example, and P-splines are used to smooth data-driven deviations over time. Consider adding covariates to the model you ran above. What are some potential issues that may happen in estimation? Can you think of an additional constraint to add to the model that would overcome these issues
+
+
+With any stan model, we can run the risk of seeing high correlations between our predictors, making it hard for the model to search the sample space and eventually converge. The common method to alleviate this issue is through the centering or standardization of our variables.
+
+## Full Plot from Q3
+
+```{r}
+df11 %>% 
+  filter(state %in% states) %>% 
+  ggplot(aes(x = year, color = state)) + 
+  geom_point(aes(y = (ent_pc)/1000)) +
+  geom_line(aes(y = (ent_pc)/1000)) + 
+  
+  geom_line(data = full_new_proj, 
+            aes(x = year, y = Med, color = state), 
+            linewidth = 1)  +
+  geom_ribbon(data = full_new_proj, 
+              aes(x = year, ymax = Upper, ymin = Lower, fill = state), 
+              alpha = 0.1, colour = NA) +
+  theme_bw() + 
+  xlab("Year") + 
+  ylab("FC Entries Per Capita") +
+  ggtitle("Estimated and projected Foster Care Entries w/ second-order P-splines")
+```
+
+
+
+
+
